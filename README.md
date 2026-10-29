@@ -88,18 +88,91 @@ The database automatically seeds test accounts on first launch using cryptograph
 ## ⚙️ Prerequisites & Setup
 
 1. **.NET 10 SDK** (v10.0.100 or later).
-2. *(Optional)* Active Azure Service Bus namespace connection string. If not provided, the solution automatically operates in **Resilient Local Mode** using high-performance `System.Threading.Channels` with identical Peek-Lock and Dead-Letter semantics.
-3. *(Optional)* OpenWeatherMap API key. If not provided, the system seamlessly uses the Open-Meteo geocoding and forecast API without requiring an account or key.
+2. *(Optional)* Active Azure Service Bus namespace connection string. If not provided or set to `UseDevelopmentEmulator=true`, the solution automatically falls back to **Resilient Local Mode** using high-performance `System.Threading.Channels` with identical Peek-Lock and Dead-Letter semantics.
+3. *(Optional)* OpenWeatherMap API key. If omitted, the system seamlessly falls back to Open-Meteo geocoding and forecast REST endpoints without requiring an account or key.
 
-### Configuration (`src/EnterpriseApp.Api/appsettings.json`)
+---
+
+## 🔒 Local Secrets & Connection Strings Setup (.NET User Secrets)
+
+To protect sensitive keys and prevent accidental commits of credentials into Git, this solution uses **.NET Secret Manager (`dotnet user-secrets`)** for local development. In production or cloud deployments, use environment variables or Azure Key Vault.
+
+All placeholders in `appsettings.json` are overridden at runtime by your local User Secrets store (`%APPDATA%\Microsoft\UserSecrets\<UserSecretsId>\secrets.json`).
+
+### 1. Configure Secrets for Web API (`EnterpriseApp.Api`)
+
+Navigate to the solution root or run commands directly targeting the project:
+
+#### A. Azure Service Bus Connection String
+To connect the messaging pipeline to an actual Azure Service Bus namespace queue:
+1. In the [Azure Portal](https://portal.azure.com), navigate to your **Service Bus Namespace**.
+2. Select **Shared access policies** (or go into your queue's shared access policies).
+3. Select or create a policy with **Send** and **Listen** permissions (e.g. `RootManageSharedAccessKey` or a custom policy).
+4. Copy the **Primary Connection String**.
+5. Save it into User Secrets:
+
+```powershell
+dotnet user-secrets set "AzureServiceBus:ConnectionString" "Endpoint=sb://<your-namespace>.servicebus.windows.net/;SharedAccessKeyName=<policy-name>;SharedAccessKey=<your-key>" --project src/EnterpriseApp.Api
+```
+
+> [!TIP]
+> If you do not have an Azure Service Bus namespace yet, you can leave the default fallback or explicitly configure local in-memory emulation:
+> ```powershell
+> dotnet user-secrets set "AzureServiceBus:ConnectionString" "UseDevelopmentEmulator=true" --project src/EnterpriseApp.Api
+> ```
+
+#### B. JWT Secret Key
+Set a cryptographically strong 256-bit (minimum 32-character) secret key used for signing HMAC-SHA256 tokens:
+
+```powershell
+dotnet user-secrets set "Jwt:SecretKey" "EnterpriseSuperSecretSecureKeyForJwtTokens2026_WithMinimumLengthRequirement!" --project src/EnterpriseApp.Api
+```
+
+#### C. Database Connection String (Optional / SQLite)
+By default, the SQLite database `EnterpriseApp.db` is used. If you wish to customize its filename or path:
+
+```powershell
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Data Source=EnterpriseApp.db" --project src/EnterpriseApp.Api
+```
+
+#### D. Weather API Key (Optional)
+If you have an OpenWeatherMap API key:
+
+```powershell
+dotnet user-secrets set "WeatherApi:ApiKey" "<your-openweathermap-api-key>" --project src/EnterpriseApp.Api
+```
+
+---
+
+### 2. Verify Configured Secrets
+
+You can inspect the active secrets configured in your local development store at any time:
+
+```powershell
+dotnet user-secrets list --project src/EnterpriseApp.Api
+```
+
+---
+
+### Base Configuration Template (`src/EnterpriseApp.Api/appsettings.json`)
+
+`appsettings.json` contains safe defaults and non-sensitive structure:
 
 ```json
 {
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning",
+      "Microsoft.EntityFrameworkCore": "Warning"
+    }
+  },
+  "AllowedHosts": "*",
   "ConnectionStrings": {
-    "DefaultConnection": "Data Source=enterprise.db"
+    "DefaultConnection": "Data Source=EnterpriseApp.db"
   },
   "Jwt": {
-    "SecretKey": "EnterpriseSuperSecretSecureKeyForJwtTokens2026_WithMinimumLengthRequirement!",
+    "SecretKey": "YOUR_JWT_SECRET_KEY_PLACEHOLDER_STORED_IN_USER_SECRETS_STORE",
     "Issuer": "EnterpriseAppApi",
     "Audience": "EnterpriseAppClients",
     "ExpirationHours": 8
@@ -108,7 +181,7 @@ The database automatically seeds test accounts on first launch using cryptograph
     "ConnectionString": "UseDevelopmentEmulator=true",
     "QueueName": "enterprise-messages"
   },
-  "Weather": {
+  "WeatherApi": {
     "ApiKey": ""
   }
 }
@@ -127,22 +200,22 @@ dotnet build EnterpriseSolution.slnx
 ```powershell
 dotnet test EnterpriseSolution.slnx
 ```
-> **Result:** 67 tests passing (0 failures, 0 skipped).
+> **Result:** 68 tests passing (0 failures, 0 skipped).
 
 ### 3. Start the ASP.NET Core Web API
 In a terminal window:
 ```powershell
-dotnet run --project src/EnterpriseApp.Api
+dotnet run --project src/EnterpriseApp.Api --launch-profile https
 ```
-- **Base URL:** `http://localhost:5000` / `https://localhost:5001`
-- **Swagger / OpenAPI Documentation:** `http://localhost:5000/swagger`
+- **Base URLs:** `https://localhost:7002` / `http://localhost:5075`
+- **Swagger / OpenAPI Documentation:** `https://localhost:7002/swagger`
 
 ### 4. Start the Blazor Interactive UI
 In a second terminal window:
 ```powershell
-dotnet run --project src/EnterpriseApp.BlazorUI
+dotnet run --project src/EnterpriseApp.BlazorUI --launch-profile https
 ```
-- **Blazor Portal:** `http://localhost:5200`
+- **Blazor Portal:** `https://localhost:7017` (or `http://localhost:5268`)
 - Navigate to:
   - `/` - Enterprise Architecture Dashboard & Module Quick-Links
   - `/library` - Library Management System (Search, Add, Delete)
