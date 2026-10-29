@@ -1,0 +1,495 @@
+@page "/products"
+@rendermode InteractiveServer
+@inject ApiClientService ApiClient
+@inject CustomAuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Product Catalog & Admin Portal</PageTitle>
+
+<div class="container-fluid px-0">
+    <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom">
+        <div>
+            <h1 class="h3 mb-1"><i class="bi bi-tags-fill text-primary me-2"></i>Product Catalog & Management</h1>
+            <p class="text-muted mb-0">Clean Architecture Module 5 &mdash; Public RESTful Catalog with Role-Based Mutations (Admin/Manager)</p>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            @if (CanMutate)
+            {
+                <button class="btn btn-primary" @onclick="OpenAddModal">
+                    <i class="bi bi-plus-circle me-1"></i> Add Product
+                </button>
+            }
+        </div>
+    </div>
+
+    <!-- Role Status & Switcher Banner -->
+    <div class="card shadow-sm border-0 mb-4 bg-light">
+        <div class="card-body py-3">
+            <div class="row align-items-center g-3">
+                <div class="col-md-7">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="fw-bold">Current Access Level:</span>
+                        @if (!AuthStateProvider.IsAuthenticated)
+                        {
+                            <span class="badge bg-secondary px-2 py-1"><i class="bi bi-eye me-1"></i>Anonymous Visitor (Read-Only)</span>
+                        }
+                        else if (AuthStateProvider.Role == "Admin")
+                        {
+                            <span class="badge bg-danger px-2 py-1"><i class="bi bi-shield-check me-1"></i>Admin (@AuthStateProvider.Username) &mdash; Full Permissions</span>
+                        }
+                        else if (AuthStateProvider.Role == "Manager")
+                        {
+                            <span class="badge bg-warning text-dark px-2 py-1"><i class="bi bi-award me-1"></i>Manager (@AuthStateProvider.Username) &mdash; Full Permissions</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-info text-dark px-2 py-1"><i class="bi bi-person me-1"></i>User (@AuthStateProvider.Username) &mdash; Read-Only</span>
+                        }
+                    </div>
+                    <div class="small text-muted mt-1">
+                        @if (CanMutate)
+                        {
+                            <span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>You are authorized to Create, Update, and Delete products.</span>
+                        }
+                        else
+                        {
+                            <span>Catalog read access is <strong>public</strong>. Creating, editing, or deleting products requires <code>Admin</code> or <code>Manager</code> role.</span>
+                        }
+                    </div>
+                </div>
+
+                <div class="col-md-5 d-flex justify-content-md-end gap-2">
+                    <button class="btn btn-sm btn-outline-danger" @onclick='() => SwitchRoleAsync("admin", "Admin@123456")' title="Login as Admin">
+                        <i class="bi bi-shield-lock"></i> Switch to Admin
+                    </button>
+                    <button class="btn btn-sm btn-outline-warning text-dark" @onclick='() => SwitchRoleAsync("manager", "Manager@123456")' title="Login as Manager">
+                        <i class="bi bi-award"></i> Switch to Manager
+                    </button>
+                    @if (AuthStateProvider.IsAuthenticated)
+                    {
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="HandleSignOut" title="Sign Out">
+                            <i class="bi bi-box-arrow-right"></i> Sign Out
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>@errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i>@successMessage
+            <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
+        </div>
+    }
+
+    <!-- Search & Filter Bar -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="input-group">
+                        <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
+                        <input type="text" class="form-control" placeholder="Search products by title or description..." 
+                               @bind="searchQuery" @bind:event="oninput" @onkeyup="HandleSearchKeyUp" />
+                        @if (!string.IsNullOrWhiteSpace(searchQuery))
+                        {
+                            <button class="btn btn-outline-secondary" @onclick="ClearSearch">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        }
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <select class="form-select" @bind="selectedCategory" @bind:after="LoadProductsAsync">
+                        <option value="">All Categories</option>
+                        <option value="Cloud Architecture">Cloud Architecture</option>
+                        <option value="Messaging & Queues">Messaging & Queues</option>
+                        <option value="Security">Security</option>
+                        <option value="Developer Tools">Developer Tools</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-outline-primary w-100" @onclick="LoadProductsAsync" disabled="@isLoading">
+                        <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Products Catalog Cards -->
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2 text-muted">Loading product catalog...</p>
+        </div>
+    }
+    else if (products == null || products.Count == 0)
+    {
+        <div class="card shadow-sm text-center py-5 text-muted">
+            <i class="bi bi-box-seam fs-1 d-block mb-2 text-secondary"></i>
+            <h5>No products available</h5>
+            <p class="mb-3">Try adjusting your filters or create a new product catalog entry.</p>
+            @if (CanMutate)
+            {
+                <div>
+                    <button class="btn btn-sm btn-primary" @onclick="OpenAddModal">Add Product</button>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+            @foreach (var prod in products)
+            {
+                <div class="col">
+                    <div class="card h-100 shadow-sm border-0">
+                        <div class="card-body d-flex flex-column">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                                    @prod.Category
+                                </span>
+                                <span class="fs-4 fw-bold text-success font-monospace">
+                                    $@prod.Price.ToString("F2")
+                                </span>
+                            </div>
+
+                            <h5 class="card-title fw-bold text-dark mb-2">@prod.Name</h5>
+                            <p class="card-text text-muted small flex-grow-1">@prod.Description</p>
+
+                            <div class="border-top pt-3 mt-3 d-flex justify-content-between align-items-center">
+                                <span class="text-muted small">
+                                    <i class="bi bi-clock me-1"></i>@prod.CreatedAtUtc.ToLocalTime().ToString("d")
+                                </span>
+
+                                @if (CanMutate)
+                                {
+                                    <div class="btn-group btn-group-sm">
+                                        <button class="btn btn-outline-secondary" @onclick="() => OpenEditModal(prod)">
+                                            <i class="bi bi-pencil"></i> Edit
+                                        </button>
+                                        <button class="btn btn-outline-danger" @onclick="() => DeleteProductAsync(prod.ProductId, prod.Name)">
+                                            <i class="bi bi-trash"></i> Delete
+                                        </button>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-light text-muted border">
+                                        <i class="bi bi-lock-fill me-1"></i>Admin/Manager to edit
+                                    </span>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- Add Product Modal -->
+@if (showAddModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>Add New Product</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => showAddModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    @if (!string.IsNullOrEmpty(modalError))
+                    {
+                        <div class="alert alert-danger py-2 small">
+                            <i class="bi bi-exclamation-circle me-1"></i>@modalError
+                        </div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Product Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" placeholder="e.g. Enterprise Cloud Suite" @bind="newProduct.Name" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Category <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" placeholder="e.g. Developer Tools" @bind="newProduct.Category" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Price (USD) <span class="text-danger">*</span></label>
+                        <input type="number" step="0.01" class="form-control" placeholder="e.g. 49.99" @bind="newProduct.Price" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Description <span class="text-danger">*</span></label>
+                        <textarea class="form-control" rows="3" placeholder="Detailed product description..." @bind="newProduct.Description"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => showAddModal = false">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="HandleCreateProductAsync" disabled="@isSubmitting">
+                        @if (isSubmitting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1"></span>
+                            <span>Saving...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-check-lg me-1"></i>
+                            <span>Save Product</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Edit Product Modal -->
+@if (showEditModal && editingProductId.HasValue)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow">
+                <div class="modal-header bg-secondary text-white">
+                    <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Edit Product</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => showEditModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    @if (!string.IsNullOrEmpty(modalError))
+                    {
+                        <div class="alert alert-danger py-2 small">
+                            <i class="bi bi-exclamation-circle me-1"></i>@modalError
+                        </div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Product Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" @bind="editProduct.Name" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Category <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" @bind="editProduct.Category" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Price (USD) <span class="text-danger">*</span></label>
+                        <input type="number" step="0.01" class="form-control" @bind="editProduct.Price" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Description <span class="text-danger">*</span></label>
+                        <textarea class="form-control" rows="3" @bind="editProduct.Description"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => showEditModal = false">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="HandleUpdateProductAsync" disabled="@isSubmitting">
+                        @if (isSubmitting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1"></span>
+                            <span>Updating...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-check-lg me-1"></i>
+                            <span>Save Changes</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<ProductDto>? products;
+    private string searchQuery = string.Empty;
+    private string selectedCategory = string.Empty;
+    private bool isLoading = true;
+    private bool isSubmitting = false;
+    private bool showAddModal = false;
+    private bool showEditModal = false;
+    private Guid? editingProductId;
+
+    private string? errorMessage;
+    private string? successMessage;
+    private string? modalError;
+
+    private bool CanMutate => AuthStateProvider.IsAuthenticated && 
+        (AuthStateProvider.Role == "Admin" || AuthStateProvider.Role == "Manager");
+
+    private CreateProductRequest newProduct = new()
+    {
+        Name = string.Empty,
+        Description = string.Empty,
+        Price = 19.99m,
+        Category = "Developer Tools"
+    };
+
+    private UpdateProductRequest editProduct = new()
+    {
+        Name = string.Empty,
+        Description = string.Empty,
+        Price = 19.99m,
+        Category = "Developer Tools"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProductsAsync();
+    }
+
+    private async Task SwitchRoleAsync(string username, string password)
+    {
+        errorMessage = null;
+        try
+        {
+            await ApiClient.LoginAsync(new LoginRequest { Username = username, Password = password });
+            successMessage = $"Switched role! Authenticated as '{username}' ({AuthStateProvider.Role}).";
+            await LoadProductsAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Role switch failed: {ex.Message}";
+        }
+    }
+
+    private void HandleSignOut()
+    {
+        ApiClient.Logout();
+        successMessage = "Signed out. You are now in public view mode.";
+    }
+
+    private async Task LoadProductsAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+        try
+        {
+            products = await ApiClient.GetProductsAsync(searchQuery, selectedCategory);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load products: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task HandleSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await LoadProductsAsync();
+        }
+    }
+
+    private async Task ClearSearch()
+    {
+        searchQuery = string.Empty;
+        await LoadProductsAsync();
+    }
+
+    private void OpenAddModal()
+    {
+        modalError = null;
+        newProduct = new CreateProductRequest
+        {
+            Name = string.Empty,
+            Description = string.Empty,
+            Price = 19.99m,
+            Category = "Developer Tools"
+        };
+        showAddModal = true;
+    }
+
+    private void OpenEditModal(ProductDto p)
+    {
+        modalError = null;
+        editingProductId = p.ProductId;
+        editProduct = new UpdateProductRequest
+        {
+            Name = p.Name,
+            Description = p.Description,
+            Price = p.Price,
+            Category = p.Category
+        };
+        showEditModal = true;
+    }
+
+    private async Task HandleCreateProductAsync()
+    {
+        modalError = null;
+        isSubmitting = true;
+        try
+        {
+            await ApiClient.CreateProductAsync(newProduct);
+            showAddModal = false;
+            successMessage = $"Product '{newProduct.Name}' added successfully.";
+            await LoadProductsAsync();
+        }
+        catch (Exception ex)
+        {
+            modalError = ex.Message;
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private async Task HandleUpdateProductAsync()
+    {
+        if (!editingProductId.HasValue) return;
+
+        modalError = null;
+        isSubmitting = true;
+        try
+        {
+            await ApiClient.UpdateProductAsync(editingProductId.Value, editProduct);
+            showEditModal = false;
+            successMessage = $"Product '{editProduct.Name}' updated successfully.";
+            await LoadProductsAsync();
+        }
+        catch (Exception ex)
+        {
+            modalError = ex.Message;
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private async Task DeleteProductAsync(Guid id, string name)
+    {
+        errorMessage = null;
+        successMessage = null;
+        try
+        {
+            await ApiClient.DeleteProductAsync(id);
+            successMessage = $"Product '{name}' deleted.";
+            await LoadProductsAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to delete product: {ex.Message}";
+        }
+    }
+}

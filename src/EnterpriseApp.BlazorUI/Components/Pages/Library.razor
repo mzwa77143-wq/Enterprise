@@ -1,0 +1,356 @@
+@page "/library"
+@rendermode InteractiveServer
+@inject ApiClientService ApiClient
+@implements IDisposable
+
+<PageTitle>Library Management System</PageTitle>
+
+<div class="container-fluid px-0">
+    <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom">
+        <div>
+            <h1 class="h3 mb-1"><i class="bi bi-book-half text-primary me-2"></i>Library Management System</h1>
+            <p class="text-muted mb-0">Clean Architecture Module 1 &mdash; Manage books with Title, Author, ISBN, and Publication Year</p>
+        </div>
+        <button class="btn btn-primary" @onclick="OpenAddModal">
+            <i class="bi bi-plus-circle me-1"></i> Add New Book
+        </button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>@errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i>@successMessage
+            <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
+        </div>
+    }
+
+    <!-- Search & Filter Card -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <div class="row g-3 align-items-center">
+                <div class="col-md-9">
+                    <div class="input-group">
+                        <span class="input-group-text bg-light">
+                            @if (isSearching)
+                            {
+                                <span class="spinner-border spinner-border-sm text-primary" role="status"></span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-search"></i>
+                            }
+                        </span>
+                        <input type="text" class="form-control" placeholder="Search by title, author, or ISBN..." 
+                               value="@searchQuery" @oninput="HandleSearchInput" @onkeyup="HandleSearchKeyUp" />
+                        @if (!string.IsNullOrWhiteSpace(searchQuery))
+                        {
+                            <button class="btn btn-outline-secondary" @onclick="ClearSearch" title="Clear search">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        }
+                    </div>
+                </div>
+                <div class="col-md-3 d-flex gap-2">
+                    <button class="btn btn-outline-primary w-100" @onclick="() => LoadBooksAsync(false)" disabled="@isLoading">
+                        <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Books Table -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+            <h5 class="card-title mb-0">
+                Book Catalog 
+                <span class="badge bg-secondary ms-2">@(books?.Count ?? 0)</span>
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            @if (isLoading)
+            {
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2 text-muted">Loading books from Clean Architecture API...</p>
+                </div>
+            }
+            else if (books == null || books.Count == 0)
+            {
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-inbox fs-1 d-block mb-2 text-secondary"></i>
+                    <h5>No books found</h5>
+                    <p class="mb-3">Try adjusting your search query or add a new book to the library.</p>
+                    <button class="btn btn-sm btn-primary" @onclick="OpenAddModal">Add Book</button>
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Title</th>
+                                <th>Author</th>
+                                <th>ISBN</th>
+                                <th>Published</th>
+                                <th>Added Date</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var book in books)
+                            {
+                                <tr>
+                                    <td class="fw-semibold text-dark">
+                                        <i class="bi bi-journal-text text-primary me-2"></i>@book.Title
+                                    </td>
+                                    <td>@book.Author</td>
+                                    <td>
+                                        <span class="badge bg-light text-dark font-monospace border">@book.Isbn</span>
+                                    </td>
+                                    <td>@book.PublicationYear</td>
+                                    <td class="text-muted small">@book.CreatedAtUtc.ToLocalTime().ToString("g")</td>
+                                    <td class="text-end">
+                                        <button class="btn btn-sm btn-outline-danger" 
+                                                title="Delete Book"
+                                                @onclick="() => DeleteBookAsync(book.Id, book.Title)">
+                                            <i class="bi bi-trash"></i> Delete
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- Add Book Modal -->
+@if (showAddModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>Add New Book</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseAddModal"></button>
+                </div>
+                <EditForm Model="@newBook" OnValidSubmit="HandleCreateBookAsync">
+                    <div class="modal-body">
+                        @if (!string.IsNullOrEmpty(modalError))
+                        {
+                            <div class="alert alert-danger py-2 small">
+                                <i class="bi bi-exclamation-circle me-1"></i>@modalError
+                            </div>
+                        }
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Book Title <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" placeholder="e.g. Clean Architecture" @bind="newBook.Title" required />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Author <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" placeholder="e.g. Robert C. Martin" @bind="newBook.Author" required />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">ISBN-10 or ISBN-13 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control font-monospace" placeholder="e.g. 978-0134494166" @bind="newBook.Isbn" required />
+                            <div class="form-text">Must be a valid 10 or 13-digit standard ISBN format.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Publication Year <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control" min="1000" max="@(DateTime.UtcNow.Year + 1)" @bind="newBook.PublicationYear" required />
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseAddModal">Cancel</button>
+                        <button type="submit" class="btn btn-primary" disabled="@isSubmitting">
+                            @if (isSubmitting)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                                <span>Saving...</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-check-lg me-1"></i>
+                                <span>Save Book</span>
+                            }
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<BookDto>? books;
+    private string searchQuery = string.Empty;
+    private bool isLoading = true;
+    private bool isSearching = false;
+    private bool showAddModal = false;
+    private bool isSubmitting = false;
+    private string? errorMessage;
+    private string? successMessage;
+    private string? modalError;
+    private CancellationTokenSource? _searchCts;
+
+    private CreateBookRequest newBook = new()
+    {
+        Title = string.Empty,
+        Author = string.Empty,
+        Isbn = string.Empty,
+        PublicationYear = DateTime.UtcNow.Year
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadBooksAsync();
+    }
+
+    private async Task LoadBooksAsync(bool isSilent = false)
+    {
+        if (!isSilent)
+        {
+            isLoading = true;
+        }
+        errorMessage = null;
+        try
+        {
+            books = await ApiClient.GetBooksAsync(searchQuery);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load books: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            isSearching = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleSearchInput(ChangeEventArgs e)
+    {
+        searchQuery = e.Value?.ToString() ?? string.Empty;
+
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
+        _searchCts = new CancellationTokenSource();
+        var token = _searchCts.Token;
+
+        try
+        {
+            isSearching = true;
+            // Debounce for 250ms so typing is smooth before calling API
+            await Task.Delay(250, token);
+            await LoadBooksAsync(isSilent: true);
+        }
+        catch (TaskCanceledException)
+        {
+            // Newer keystroke arrived
+        }
+        finally
+        {
+            if (!token.IsCancellationRequested)
+            {
+                isSearching = false;
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async Task HandleSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _searchCts?.Cancel();
+            isSearching = false;
+            await LoadBooksAsync(isSilent: false);
+        }
+    }
+
+    private async Task ClearSearch()
+    {
+        _searchCts?.Cancel();
+        searchQuery = string.Empty;
+        isSearching = false;
+        await LoadBooksAsync(isSilent: false);
+    }
+
+    public void Dispose()
+    {
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
+    }
+
+    private void OpenAddModal()
+    {
+        modalError = null;
+        newBook = new CreateBookRequest
+        {
+            Title = string.Empty,
+            Author = string.Empty,
+            Isbn = string.Empty,
+            PublicationYear = DateTime.UtcNow.Year
+        };
+        showAddModal = true;
+    }
+
+    private void CloseAddModal()
+    {
+        showAddModal = false;
+    }
+
+    private async Task HandleCreateBookAsync()
+    {
+        modalError = null;
+        isSubmitting = true;
+        try
+        {
+            await ApiClient.CreateBookAsync(newBook);
+            showAddModal = false;
+            successMessage = $"Successfully added '{newBook.Title}' to library!";
+            await LoadBooksAsync();
+        }
+        catch (Exception ex)
+        {
+            modalError = ex.Message;
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private async Task DeleteBookAsync(Guid id, string title)
+    {
+        errorMessage = null;
+        successMessage = null;
+        try
+        {
+            await ApiClient.DeleteBookAsync(id);
+            successMessage = $"Book '{title}' was deleted successfully.";
+            await LoadBooksAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to delete book: {ex.Message}";
+        }
+    }
+}

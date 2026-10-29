@@ -1,0 +1,176 @@
+@page "/"
+@rendermode InteractiveServer
+
+<PageTitle>Enterprise .NET Clean Architecture Hub</PageTitle>
+
+<div class="container-fluid px-0">
+    <!-- Hero Header -->
+    <div class="p-5 mb-4 bg-light rounded-3 shadow-sm border">
+        <div class="container-fluid py-2">
+            <div class="d-flex align-items-center gap-2 mb-2">
+                <span class="badge bg-primary">Enterprise Grade</span>
+                <span class="badge bg-dark">.NET 10 / C#</span>
+                <span class="badge bg-info text-dark">Clean Architecture</span>
+                <span class="badge bg-success">JWT Secured</span>
+                <span class="badge bg-warning text-dark">Azure Service Bus</span>
+            </div>
+            <h1 class="display-5 fw-bold text-dark">Enterprise Software Architecture Solution</h1>
+            <p class="col-md-10 fs-5 text-muted">
+                A production-ready .NET 10 multi-module system enforcing strict inward Clean Architecture dependencies (<code>Domain</code> &larr; <code>Application</code> &larr; <code>Infrastructure</code> &larr; <code>Presentation / API & UI</code>), enterprise messaging via Azure Service Bus, JWT Bearer security, and interactive Blazor front-ends.
+            </p>
+            <div class="d-flex gap-3 mt-3">
+                <a href="library" class="btn btn-primary btn-lg px-4"><i class="bi bi-play-circle me-1"></i> Explore Modules</a>
+                <a href="https://localhost:7002/swagger" target="_blank" class="btn btn-outline-secondary btn-lg px-4"><i class="bi bi-code-slash me-1"></i> REST API Swagger</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Clean Architecture Layers Card -->
+    <div class="card shadow-sm mb-5 border-0">
+        <div class="card-header bg-white py-3">
+            <h5 class="card-title mb-0"><i class="bi bi-diagram-3-fill text-primary me-2"></i>Clean Architecture Inward Dependency Model</h5>
+        </div>
+        <div class="card-body">
+            <div class="row g-3 text-center">
+                <div class="col-md-3">
+                    <div class="p-3 border rounded bg-white h-100 shadow-sm">
+                        <span class="badge bg-danger mb-2">Innermost Core</span>
+                        <h6 class="fw-bold">1. Domain Layer</h6>
+                        <small class="text-muted d-block mb-2"><code>EnterpriseApp.Domain</code></small>
+                        <p class="small text-muted mb-0">Entities, Value Objects, Domain Exceptions, Enums. Zero external dependencies.</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="p-3 border rounded bg-white h-100 shadow-sm">
+                        <span class="badge bg-warning text-dark mb-2">Core Logic</span>
+                        <h6 class="fw-bold">2. Application Layer</h6>
+                        <small class="text-muted d-block mb-2"><code>EnterpriseApp.Application</code></small>
+                        <p class="small text-muted mb-0">Use cases, Repository Interfaces, DTOs, FluentValidation. Depends solely on Domain.</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="p-3 border rounded bg-white h-100 shadow-sm">
+                        <span class="badge bg-primary mb-2">Adapters & Tech</span>
+                        <h6 class="fw-bold">3. Infrastructure Layer</h6>
+                        <small class="text-muted d-block mb-2"><code>EnterpriseApp.Infrastructure</code></small>
+                        <p class="small text-muted mb-0">EF Core SQLite, Azure Service Bus Sender/Processor, JWT generation, Weather HTTP client.</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="p-3 border rounded bg-white h-100 shadow-sm">
+                        <span class="badge bg-success mb-2">Entrypoints</span>
+                        <h6 class="fw-bold">4. API & Blazor UI</h6>
+                        <small class="text-muted d-block mb-2"><code>EnterpriseApp.Api</code> & <code>BlazorUI</code></small>
+                        <p class="small text-muted mb-0">ASP.NET Core Web API controllers, JWT auth middleware, Blazor interactive server components.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 6 Module Cards -->
+    <h4 class="fw-bold mb-3"><i class="bi bi-grid-fill text-primary me-2"></i>The 6 Enterprise Modules</h4>
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4 mb-5">
+        <!-- Module 1 -->
+        <div class="col">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body d-flex flex-column">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="badge bg-info text-dark">Module 1</span>
+                        <i class="bi bi-book-half fs-3 text-info"></i>
+                    </div>
+                    <h5 class="card-title fw-bold">Library Management System</h5>
+                    <p class="card-text text-muted small flex-grow-1">
+                        Full Clean Architecture book management supporting Title, Author, standard ISBN-10/13 validation, and publication year. Interactive Blazor search, add modal, and delete.
+                    </p>
+                    <a href="library" class="btn btn-outline-info text-dark mt-3 w-100">Open Library UI &rarr;</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Module 2 -->
+        <div class="col">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body d-flex flex-column">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="badge bg-warning text-dark">Module 2</span>
+                        <i class="bi bi-cpu fs-3 text-warning"></i>
+                    </div>
+                    <h5 class="card-title fw-bold">Multi-threaded Factorial Calculator</h5>
+                    <p class="card-text text-muted small flex-grow-1">
+                        Concurrent large number calculation using <code>SemaphoreSlim</code> throttling, thread safety, and <code>BigInteger</code>. Live worker thread telemetry and duration benchmarking.
+                    </p>
+                    <a href="factorial" class="btn btn-outline-warning text-dark mt-3 w-100">Launch Calculator &rarr;</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Module 3 -->
+        <div class="col">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body d-flex flex-column">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="badge bg-primary">Module 3</span>
+                        <i class="bi bi-broadcast fs-3 text-primary"></i>
+                    </div>
+                    <h5 class="card-title fw-bold">Azure Service Bus Pipeline</h5>
+                    <p class="card-text text-muted small flex-grow-1">
+                        Enterprise messaging with <code>ServiceBusSender</code> publisher and background <code>ServiceBusProcessor</code> consumer using Peek-Lock completion and Dead-Letter queue routing.
+                    </p>
+                    <a href="messaging" class="btn btn-outline-primary mt-3 w-100">Monitor Pipeline &rarr;</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Module 4 -->
+        <div class="col">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body d-flex flex-column">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="badge bg-success">Module 4</span>
+                        <i class="bi bi-person-lines-fill fs-3 text-success"></i>
+                    </div>
+                    <h5 class="card-title fw-bold">Customer CRM (JWT Secured)</h5>
+                    <p class="card-text text-muted small flex-grow-1">
+                        Full EF Core database CRUD protected by JWT Bearer Authentication. Features rich Blazor DataGrid, form validation, email validation, and 1-click test login presets.
+                    </p>
+                    <a href="customers" class="btn btn-outline-success mt-3 w-100">Open Customer CRM &rarr;</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Module 5 -->
+        <div class="col">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body d-flex flex-column">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="badge bg-danger">Module 5</span>
+                        <i class="bi bi-tags-fill fs-3 text-danger"></i>
+                    </div>
+                    <h5 class="card-title fw-bold">Product REST API & Catalog</h5>
+                    <p class="card-text text-muted small flex-grow-1">
+                        RESTful catalog with public read endpoints and role-restricted mutations (<code>Admin</code> / <code>Manager</code>). Features role-based UI component rendering.
+                    </p>
+                    <a href="products" class="btn btn-outline-danger mt-3 w-100">Open Product Catalog &rarr;</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Module 6 -->
+        <div class="col">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body d-flex flex-column">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="badge bg-info text-dark">Module 6</span>
+                        <i class="bi bi-cloud-sun-fill fs-3 text-info"></i>
+                    </div>
+                    <h5 class="card-title fw-bold">Weather API Consumer</h5>
+                    <p class="card-text text-muted small flex-grow-1">
+                        External HTTP integration via <code>IHttpClientFactory</code> querying live weather data. Supports OpenWeatherMap + zero-config Open-Meteo fallback, and Celsius/Fahrenheit conversion.
+                    </p>
+                    <a href="weather" class="btn btn-outline-info text-dark mt-3 w-100">View Weather &rarr;</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/EnterpriseApp.Api/EnterpriseApp.Api.csproj" />
+    <Project Path="src/EnterpriseApp.Application/EnterpriseApp.Application.csproj" />
+    <Project Path="src/EnterpriseApp.BlazorUI/EnterpriseApp.BlazorUI.csproj" />
+    <Project Path="src/EnterpriseApp.Domain/EnterpriseApp.Domain.csproj" />
+    <Project Path="src/EnterpriseApp.Infrastructure/EnterpriseApp.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/EnterpriseApp.UnitTests/EnterpriseApp.UnitTests.csproj" />
+  </Folder>
+</Solution>

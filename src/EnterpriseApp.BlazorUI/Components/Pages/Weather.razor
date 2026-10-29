@@ -1,0 +1,185 @@
+@page "/weather"
+@rendermode InteractiveServer
+@inject ApiClientService ApiClient
+
+<PageTitle>Weather API Consumer</PageTitle>
+
+<div class="container-fluid px-0">
+    <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom">
+        <div>
+            <h1 class="h3 mb-1"><i class="bi bi-cloud-sun-fill text-primary me-2"></i>Weather API Consumer</h1>
+            <p class="text-muted mb-0">Clean Architecture Module 6 &mdash; Consumes external Weather API via <code>IHttpClientFactory</code> with Open-Meteo & OpenWeatherMap</p>
+        </div>
+        <div class="btn-group" role="group">
+            <input type="radio" class="btn-check" name="tempUnit" id="unitC" autocomplete="off" checked="@useCelsius" @onclick="() => useCelsius = true">
+            <label class="btn btn-outline-primary" for="unitC">°C (Celsius)</label>
+
+            <input type="radio" class="btn-check" name="tempUnit" id="unitF" autocomplete="off" checked="@(!useCelsius)" @onclick="() => useCelsius = false">
+            <label class="btn btn-outline-primary" for="unitF">°F (Fahrenheit)</label>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>@errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+        </div>
+    }
+
+    <!-- Search Input Card -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <label class="form-label fw-semibold">Enter City or Metropolitan Area:</label>
+            <div class="input-group mb-3">
+                <span class="input-group-text bg-light"><i class="bi bi-geo-alt-fill text-primary"></i></span>
+                <input type="text" class="form-control form-control-lg" placeholder="e.g. London, Tokyo, New York, Johannesburg..." 
+                       @bind="cityInput" @onkeyup="HandleKeyUp" disabled="@isLoading" />
+                <button class="btn btn-primary px-4" @onclick="FetchWeatherAsync" disabled="@isLoading">
+                    @if (isLoading)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                        <span>Fetching...</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-search me-1"></i>
+                        <span>Get Forecast</span>
+                    }
+                </button>
+            </div>
+
+            <!-- Quick City Buttons -->
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <span class="small text-muted me-1">Popular Cities:</span>
+                <button class="btn btn-sm btn-outline-secondary" @onclick='() => SelectQuickCity("London")' disabled="@isLoading">London</button>
+                <button class="btn btn-sm btn-outline-secondary" @onclick='() => SelectQuickCity("New York")' disabled="@isLoading">New York</button>
+                <button class="btn btn-sm btn-outline-secondary" @onclick='() => SelectQuickCity("Tokyo")' disabled="@isLoading">Tokyo</button>
+                <button class="btn btn-sm btn-outline-secondary" @onclick='() => SelectQuickCity("Paris")' disabled="@isLoading">Paris</button>
+                <button class="btn btn-sm btn-outline-secondary" @onclick='() => SelectQuickCity("Sydney")' disabled="@isLoading">Sydney</button>
+                <button class="btn btn-sm btn-outline-secondary" @onclick='() => SelectQuickCity("Berlin")' disabled="@isLoading">Berlin</button>
+                <button class="btn btn-sm btn-outline-secondary" @onclick='() => SelectQuickCity("Toronto")' disabled="@isLoading">Toronto</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Weather Report Display -->
+    @if (report != null)
+    {
+        <div class="card shadow-sm border-0 overflow-hidden mb-4">
+            <div class="card-header bg-primary text-white py-4 px-4 d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="h3 mb-0 fw-bold">
+                        <i class="bi bi-geo-fill me-2"></i>@report.City, @report.Country
+                    </h2>
+                    <small class="text-white-50">Retrieved: @report.ObservationTimeUtc.ToLocalTime().ToString("f")</small>
+                </div>
+                <div>
+                    <span class="badge bg-light text-primary fs-6 px-3 py-2 border">
+                        <i class="bi bi-cloud-check me-1"></i> Source: @report.DataSource
+                    </span>
+                </div>
+            </div>
+            <div class="card-body p-4">
+                <div class="row align-items-center g-4">
+                    <div class="col-md-5 text-center border-end">
+                        <div class="display-1 fw-bold text-dark my-2">
+                            @(useCelsius ? $"{report.TemperatureCelsius:F1}°C" : $"{report.TemperatureFahrenheit:F1}°F")
+                        </div>
+                        <div class="fs-4 text-muted fw-semibold">
+                            @report.Condition
+                        </div>
+                        <div class="text-muted small mt-1">
+                            Feels like @(useCelsius ? $"{report.FeelsLikeCelsius:F1}°C" : $"{report.FeelsLikeFahrenheit:F1}°F")
+                        </div>
+                    </div>
+
+                    <div class="col-md-7">
+                        <div class="row g-3">
+                            <div class="col-sm-6">
+                                <div class="p-3 bg-light rounded text-center">
+                                    <i class="bi bi-droplet-half text-info fs-3 d-block mb-1"></i>
+                                    <div class="text-muted small">Relative Humidity</div>
+                                    <div class="fs-4 fw-bold text-dark">@report.HumidityPercent%</div>
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="p-3 bg-light rounded text-center">
+                                    <i class="bi bi-wind text-secondary fs-3 d-block mb-1"></i>
+                                    <div class="text-muted small">Wind Speed</div>
+                                    <div class="fs-4 fw-bold text-dark">@report.WindSpeedKph.ToString("F1") <small class="fs-6">km/h</small></div>
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="p-3 bg-light rounded text-center">
+                                    <i class="bi bi-thermometer-half text-danger fs-3 d-block mb-1"></i>
+                                    <div class="text-muted small">Celsius / Fahrenheit</div>
+                                    <div class="fs-5 fw-bold text-dark">@report.TemperatureCelsius:F1°C / @report.TemperatureFahrenheit:F1°F</div>
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="p-3 bg-light rounded text-center">
+                                    <i class="bi bi-check-circle text-success fs-3 d-block mb-1"></i>
+                                    <div class="text-muted small">Status</div>
+                                    <div class="fs-5 fw-bold text-success">Active & Realtime</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private string cityInput = "London";
+    private bool useCelsius = true;
+    private bool isLoading = false;
+    private string? errorMessage;
+    private WeatherDto? report;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await FetchWeatherAsync();
+    }
+
+    private async Task SelectQuickCity(string city)
+    {
+        cityInput = city;
+        await FetchWeatherAsync();
+    }
+
+    private async Task HandleKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await FetchWeatherAsync();
+        }
+    }
+
+    private async Task FetchWeatherAsync()
+    {
+        if (string.IsNullOrWhiteSpace(cityInput))
+        {
+            errorMessage = "Please enter a valid city name.";
+            return;
+        }
+
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            report = await ApiClient.GetWeatherAsync(cityInput);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Could not retrieve weather for '{cityInput}': {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

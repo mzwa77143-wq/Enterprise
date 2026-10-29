@@ -1,0 +1,348 @@
+@page "/messaging"
+@rendermode InteractiveServer
+@inject ApiClientService ApiClient
+
+<PageTitle>Azure Service Bus Pipeline Monitor</PageTitle>
+
+<div class="container-fluid px-0">
+    <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom">
+        <div>
+            <h1 class="h3 mb-1"><i class="bi bi-broadcast text-primary me-2"></i>Azure Service Bus Pipeline Monitor</h1>
+            <p class="text-muted mb-0">Clean Architecture Module 3 &mdash; Producer-Consumer pipeline with Peek-Lock completion and Dead-Letter queue management</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-danger" @onclick="ClearLogsAsync" disabled="@isLoading">
+                <i class="bi bi-trash3 me-1"></i> Clear Logs
+            </button>
+            <button class="btn btn-outline-primary" @onclick="() => RefreshDataAsync(false)" disabled="@isLoading">
+                <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>@errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i>@successMessage
+            <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
+        </div>
+    }
+
+    <!-- Metrics Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 bg-light text-center py-3">
+                <div class="text-muted small text-uppercase fw-bold">Active Transport Mode</div>
+                <div class="fs-4 fw-bold text-primary mt-1">
+                    <span class="badge bg-primary">@(metrics?.ActiveTransportMode ?? "Azure Service Bus")</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 bg-light text-center py-3">
+                <div class="text-muted small text-uppercase fw-bold">Total Enqueued</div>
+                <div class="fs-2 fw-bold text-dark">@(metrics?.TotalEnqueued ?? 0)</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 bg-light text-center py-3">
+                <div class="text-muted small text-uppercase fw-bold">Peek-Lock Completed</div>
+                <div class="fs-2 fw-bold text-success">@(metrics?.TotalCompleted ?? 0)</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 bg-light text-center py-3">
+                <div class="text-muted small text-uppercase fw-bold">Dead-Lettered</div>
+                <div class="fs-2 fw-bold text-danger">@(metrics?.TotalDeadLettered ?? 0)</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dispatch & Test Controls -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white py-3">
+            <h5 class="card-title mb-0"><i class="bi bi-send-fill me-2 text-primary"></i>Dispatch Message (Producer Service)</h5>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Subject / Message Type:</label>
+                    <input type="text" class="form-control" placeholder="e.g. OrderCreated, CustomerRegistered" @bind="messageSubject" />
+                    
+                    <div class="d-flex flex-wrap gap-1 mt-2">
+                        <button class="btn btn-sm btn-outline-secondary" @onclick='() => SetPresetMessage("CustomerRegistered", "{\"customerId\": \"cust_101\", \"tier\": \"Gold\"}")'>
+                            CustomerRegistered
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" @onclick='() => SetPresetMessage("OrderProcessed", "{\"orderId\": 9801, \"amount\": 149.99}")'>
+                            OrderProcessed
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" @onclick='() => SetPresetMessage("PoisonMessage", "{\"invalidToken\": true, \"forceError\": true}", true)'>
+                            Poison Message
+                        </button>
+                    </div>
+                </div>
+
+                <div class="col-md-5">
+                    <label class="form-label fw-semibold">Payload Body (JSON / Text):</label>
+                    <textarea class="form-control font-monospace" rows="3" placeholder='{"key": "value"}' @bind="messageBody"></textarea>
+                </div>
+
+                <div class="col-md-3 d-flex flex-column justify-content-between">
+                    <div class="form-check form-switch mt-2">
+                        <input class="form-check-input" type="checkbox" id="poisonCheck" @bind="simulatePoison" />
+                        <label class="form-check-label fw-semibold text-danger" for="poisonCheck">
+                            Force Dead-Letter (Poison)
+                        </label>
+                        <div class="form-text small text-muted">
+                            Causes consumer to route this message to the Dead-Letter Queue (DLQ).
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary w-100 py-2 mt-2" @onclick="SendMessageAsync" disabled="@isSending">
+                        @if (isSending)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                            <span>Publishing to Queue...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-cloud-arrow-up me-1"></i>
+                            <span>Publish Message</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Processed Message Logs Grid -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+            <h5 class="card-title mb-0">
+                Consumer Processing Log
+                <span class="badge bg-secondary ms-2">@(logs?.Count ?? 0)</span>
+            </h5>
+            <div class="form-check form-switch small">
+                <input class="form-check-input" type="checkbox" id="autoRefreshCheck" @bind="autoRefresh" @bind:after="ToggleAutoRefresh" />
+                <label class="form-check-label text-muted" for="autoRefreshCheck">Auto-refresh (3s)</label>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            @if (isLoading && logs == null)
+            {
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2 text-muted">Loading consumer telemetry...</p>
+                </div>
+            }
+            else if (logs == null || logs.Count == 0)
+            {
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-inbox fs-1 d-block mb-2 text-secondary"></i>
+                    <h5>No messages processed yet</h5>
+                    <p class="mb-3">Publish a message using the producer controls above to observe Peek-Lock processing.</p>
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Message ID</th>
+                                <th>Subject</th>
+                                <th>Payload Body</th>
+                                <th>Delivery Count</th>
+                                <th>Status</th>
+                                <th>Processed At</th>
+                                <th>Processing Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var log in logs)
+                            {
+                                <tr>
+                                    <td class="font-monospace small text-muted">
+                                        @log.MessageId.Substring(0, Math.Min(8, log.MessageId.Length))...
+                                    </td>
+                                    <td class="fw-semibold">@log.Subject</td>
+                                    <td class="font-monospace small" style="max-width: 250px;">
+                                        <div class="text-truncate" title="@log.Body">@log.Body</div>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-light text-dark border font-monospace">@log.DeliveryCount</span>
+                                    </td>
+                                    <td>
+                                        @if (log.Status == "Completed")
+                                        {
+                                            <span class="badge bg-success"><i class="bi bi-check2-circle me-1"></i>Completed (Peek-Lock)</span>
+                                        }
+                                        else if (log.Status == "DeadLettered")
+                                        {
+                                            <span class="badge bg-danger"><i class="bi bi-exclamation-octagon me-1"></i>Dead-Lettered</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-warning text-dark">@log.Status</span>
+                                        }
+                                    </td>
+                                    <td class="text-muted small">@(log.ProcessedAtUtc.HasValue ? log.ProcessedAtUtc.Value.ToLocalTime().ToString("g") : "Pending")</td>
+                                    <td class="small text-muted" style="max-width: 250px;">
+                                        <div class="text-truncate" title="@log.ProcessingNotes">@log.ProcessingNotes</div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private QueueMetricsDto? metrics;
+    private IReadOnlyList<ServiceBusMessageDto>? logs;
+    private bool isLoading = true;
+    private bool isSending = false;
+    private bool simulatePoison = false;
+    private bool autoRefresh = true;
+    private System.Threading.Timer? refreshTimer;
+
+    private string messageSubject = "OrderCreated";
+    private string messageBody = "{\"orderId\": 1024, \"item\": \"Domain-Driven Design Book\", \"total\": 49.99}";
+    private string? errorMessage;
+    private string? successMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshDataAsync();
+        StartTimer();
+    }
+
+    private void StartTimer()
+    {
+        refreshTimer = new System.Threading.Timer(async _ =>
+        {
+            if (autoRefresh)
+            {
+                await InvokeAsync(async () =>
+                {
+                    await RefreshDataAsync(silent: true);
+                    StateHasChanged();
+                });
+            }
+        }, null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
+    }
+
+    private void ToggleAutoRefresh()
+    {
+        if (!autoRefresh && refreshTimer != null)
+        {
+            refreshTimer.Dispose();
+            refreshTimer = null;
+        }
+        else if (autoRefresh && refreshTimer == null)
+        {
+            StartTimer();
+        }
+    }
+
+    private void SetPresetMessage(string subject, string body, bool poison = false)
+    {
+        messageSubject = subject;
+        messageBody = body;
+        simulatePoison = poison;
+    }
+
+    private async Task RefreshDataAsync(bool silent = false)
+    {
+        if (!silent) isLoading = true;
+        try
+        {
+            metrics = await ApiClient.GetMessageMetricsAsync();
+            logs = await ApiClient.GetMessageLogsAsync();
+        }
+        catch (Exception ex)
+        {
+            if (!silent) errorMessage = $"Failed to fetch messaging telemetry: {ex.Message}";
+        }
+        finally
+        {
+            if (!silent) isLoading = false;
+        }
+    }
+
+    private async Task SendMessageAsync()
+    {
+        if (string.IsNullOrWhiteSpace(messageSubject) || string.IsNullOrWhiteSpace(messageBody))
+        {
+            errorMessage = "Please enter both subject and body for the message.";
+            return;
+        }
+
+        isSending = true;
+        errorMessage = null;
+        successMessage = null;
+
+        try
+        {
+            var props = new Dictionary<string, string>();
+            if (simulatePoison)
+            {
+                props["SimulateDeadLetter"] = "true";
+            }
+
+            var request = new SendMessageRequest
+            {
+                Subject = messageSubject,
+                Body = messageBody,
+                SimulateDeadLetter = simulatePoison,
+                Properties = props
+            };
+
+            var resp = await ApiClient.SendServiceBusMessageAsync(request);
+            var msgId = resp.TryGetProperty("messageId", out var idProp) ? idProp.GetString() : "Enqueued";
+            successMessage = $"Message '{messageSubject}' published! Enqueued with ID {msgId?.Substring(0, Math.Min(8, msgId.Length))}...";
+
+            // Delay a brief moment to allow consumer to process peek-lock
+            await Task.Delay(350);
+            await RefreshDataAsync(silent: true);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to send message: {ex.Message}";
+        }
+        finally
+        {
+            isSending = false;
+        }
+    }
+
+    private async Task ClearLogsAsync()
+    {
+        try
+        {
+            await ApiClient.ClearMessageLogsAsync();
+            successMessage = "Message processing logs cleared.";
+            await RefreshDataAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to clear logs: {ex.Message}";
+        }
+    }
+
+    public void Dispose()
+    {
+        refreshTimer?.Dispose();
+    }
+}

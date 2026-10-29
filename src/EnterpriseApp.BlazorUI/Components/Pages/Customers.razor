@@ -1,0 +1,505 @@
+@page "/customers"
+@rendermode InteractiveServer
+@inject ApiClientService ApiClient
+@inject CustomAuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Customer CRM Management (JWT Secured)</PageTitle>
+
+<div class="container-fluid px-0">
+    <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom">
+        <div>
+            <h1 class="h3 mb-1"><i class="bi bi-person-lines-fill text-primary me-2"></i>Customer CRM Management</h1>
+            <p class="text-muted mb-0">Clean Architecture Module 4 &mdash; Full EF Core CRUD protected by JWT Bearer Authentication</p>
+        </div>
+        @if (AuthStateProvider.IsAuthenticated)
+        {
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-success-subtle text-success border border-success px-3 py-2">
+                    <i class="bi bi-shield-lock-fill me-1"></i> Authenticated as <strong>@AuthStateProvider.Username</strong> (@AuthStateProvider.Role)
+                </span>
+                <button class="btn btn-outline-secondary btn-sm" @onclick="HandleLogout">
+                    <i class="bi bi-box-arrow-right me-1"></i> Sign Out
+                </button>
+                <button class="btn btn-primary" @onclick="OpenAddModal">
+                    <i class="bi bi-person-plus-fill me-1"></i> Add Customer
+                </button>
+            </div>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>@errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i>@successMessage
+            <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
+        </div>
+    }
+
+    @if (!AuthStateProvider.IsAuthenticated)
+    {
+        <!-- Authentication Required Banner & Quick Login -->
+        <div class="card shadow-sm border-warning mb-4">
+            <div class="card-header bg-warning bg-opacity-10 py-3">
+                <h5 class="card-title text-warning-emphasis mb-0">
+                    <i class="bi bi-shield-exclamation me-2"></i>JWT Authentication Required
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">
+                    The Customer API endpoints are decorated with <code>[Authorize]</code>. An active JSON Web Token (JWT) is required to view, create, update, and delete customers.
+                </p>
+
+                <div class="row g-4 mt-2">
+                    <div class="col-md-6 border-end">
+                        <h6 class="fw-bold mb-3"><i class="bi bi-lightning-charge-fill text-primary me-1"></i>Instant 1-Click Demo Login:</h6>
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-outline-primary text-start p-2" @onclick='() => QuickLoginAsync("admin", "Admin@123456")'>
+                                <div class="fw-bold"><i class="bi bi-shield-shaded me-1"></i> Login as Admin</div>
+                                <small class="text-muted">Username: admin | Full CRUD + Product Management Permissions</small>
+                            </button>
+                            <button class="btn btn-outline-secondary text-start p-2" @onclick='() => QuickLoginAsync("user", "User@123456")'>
+                                <div class="fw-bold"><i class="bi bi-person-fill me-1"></i> Login as Standard User</div>
+                                <small class="text-muted">Username: user | Customer CRUD Permitted</small>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <h6 class="fw-bold mb-3"><i class="bi bi-key-fill text-primary me-1"></i>Custom Account Sign In:</h6>
+                        <div class="mb-2">
+                            <input type="text" class="form-control form-control-sm" placeholder="Username" @bind="loginUsername" />
+                        </div>
+                        <div class="mb-3">
+                            <input type="password" class="form-control form-control-sm" placeholder="Password" @bind="loginPassword" />
+                        </div>
+                        <button class="btn btn-primary btn-sm w-100" @onclick="HandleCustomLoginAsync" disabled="@isAuthenticating">
+                            @if (isAuthenticating)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1"></span>
+                                <span>Authenticating...</span>
+                            }
+                            else
+                            {
+                                <span>Sign In & Generate JWT</span>
+                            }
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <!-- Search & Actions Bar -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <div class="row g-3 align-items-center">
+                    <div class="col-md-9">
+                        <div class="input-group">
+                            <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
+                            <input type="text" class="form-control" placeholder="Search by customer name, email, or phone number..." 
+                                   @bind="searchQuery" @bind:event="oninput" @onkeyup="HandleSearchKeyUp" />
+                            @if (!string.IsNullOrWhiteSpace(searchQuery))
+                            {
+                                <button class="btn btn-outline-secondary" @onclick="ClearSearch">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            }
+                        </div>
+                    </div>
+                    <div class="col-md-3 d-flex gap-2">
+                        <button class="btn btn-outline-primary w-100" @onclick="LoadCustomersAsync" disabled="@isLoading">
+                            <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Customer DataGrid Table -->
+        <div class="card shadow-sm">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    Customer Database (EF Core)
+                    <span class="badge bg-secondary ms-2">@(customers?.Count ?? 0)</span>
+                </h5>
+            </div>
+            <div class="card-body p-0">
+                @if (isLoading)
+                {
+                    <div class="text-center py-5">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <p class="mt-2 text-muted">Retrieving secured customer data from API...</p>
+                    </div>
+                }
+                else if (customers == null || customers.Count == 0)
+                {
+                    <div class="text-center py-5 text-muted">
+                        <i class="bi bi-people fs-1 d-block mb-2 text-secondary"></i>
+                        <h5>No customers found</h5>
+                        <p class="mb-3">Try adjusting your search criteria or register a new customer.</p>
+                        <button class="btn btn-sm btn-primary" @onclick="OpenAddModal">Add Customer</button>
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Customer ID</th>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Phone Number</th>
+                                    <th>Registered</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var c in customers)
+                                {
+                                    <tr>
+                                        <td class="font-monospace small text-muted">
+                                            @c.CustomerId.ToString().Substring(0, 8)...
+                                        </td>
+                                        <td class="fw-semibold text-dark">
+                                            <i class="bi bi-person-circle text-primary me-2"></i>@c.Name
+                                        </td>
+                                        <td>
+                                            <a href="mailto:@c.Email" class="text-decoration-none text-dark">
+                                                <i class="bi bi-envelope me-1 text-muted"></i>@c.Email
+                                            </a>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-light text-dark border">
+                                                <i class="bi bi-telephone me-1 text-muted"></i>@c.PhoneNumber
+                                            </span>
+                                        </td>
+                                        <td class="text-muted small">@c.CreatedAtUtc.ToLocalTime().ToString("g")</td>
+                                        <td class="text-end">
+                                            <div class="btn-group btn-group-sm">
+                                                <button class="btn btn-outline-secondary" title="Edit Customer" @onclick="() => OpenEditModal(c)">
+                                                    <i class="bi bi-pencil"></i> Edit
+                                                </button>
+                                                <button class="btn btn-outline-danger" title="Delete Customer" @onclick="() => DeleteCustomerAsync(c.CustomerId, c.Name)">
+                                                    <i class="bi bi-trash"></i> Delete
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Add Customer Modal -->
+@if (showAddModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title"><i class="bi bi-person-plus-fill me-2"></i>Add New Customer</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => showAddModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    @if (!string.IsNullOrEmpty(modalError))
+                    {
+                        <div class="alert alert-danger py-2 small">
+                            <i class="bi bi-exclamation-circle me-1"></i>@modalError
+                        </div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Customer Full Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" placeholder="e.g. Jane Doe" @bind="newCustomer.Name" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Email Address <span class="text-danger">*</span></label>
+                        <input type="email" class="form-control" placeholder="e.g. jane.doe@enterprise.com" @bind="newCustomer.Email" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Phone Number <span class="text-danger">*</span></label>
+                        <input type="tel" class="form-control" placeholder="e.g. +1-555-0199" @bind="newCustomer.PhoneNumber" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => showAddModal = false">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="HandleCreateCustomerAsync" disabled="@isSubmitting">
+                        @if (isSubmitting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1"></span>
+                            <span>Saving...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-check-lg me-1"></i>
+                            <span>Save Customer</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Edit Customer Modal -->
+@if (showEditModal && editingCustomerId.HasValue)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow">
+                <div class="modal-header bg-secondary text-white">
+                    <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Edit Customer</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => showEditModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    @if (!string.IsNullOrEmpty(modalError))
+                    {
+                        <div class="alert alert-danger py-2 small">
+                            <i class="bi bi-exclamation-circle me-1"></i>@modalError
+                        </div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Customer Full Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" @bind="editCustomer.Name" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Email Address <span class="text-danger">*</span></label>
+                        <input type="email" class="form-control" @bind="editCustomer.Email" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Phone Number <span class="text-danger">*</span></label>
+                        <input type="tel" class="form-control" @bind="editCustomer.PhoneNumber" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => showEditModal = false">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="HandleUpdateCustomerAsync" disabled="@isSubmitting">
+                        @if (isSubmitting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1"></span>
+                            <span>Updating...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-check-lg me-1"></i>
+                            <span>Save Changes</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<CustomerDto>? customers;
+    private string searchQuery = string.Empty;
+    private bool isLoading = false;
+    private bool isAuthenticating = false;
+    private bool isSubmitting = false;
+    private bool showAddModal = false;
+    private bool showEditModal = false;
+    private Guid? editingCustomerId;
+
+    private string loginUsername = "admin";
+    private string loginPassword = "Admin@123456";
+
+    private string? errorMessage;
+    private string? successMessage;
+    private string? modalError;
+
+    private CreateCustomerRequest newCustomer = new()
+    {
+        Name = string.Empty,
+        Email = string.Empty,
+        PhoneNumber = string.Empty
+    };
+
+    private UpdateCustomerRequest editCustomer = new()
+    {
+        Name = string.Empty,
+        Email = string.Empty,
+        PhoneNumber = string.Empty
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthStateProvider.IsAuthenticated)
+        {
+            await LoadCustomersAsync();
+        }
+    }
+
+    private async Task QuickLoginAsync(string username, string password)
+    {
+        loginUsername = username;
+        loginPassword = password;
+        await HandleCustomLoginAsync();
+    }
+
+    private async Task HandleCustomLoginAsync()
+    {
+        isAuthenticating = true;
+        errorMessage = null;
+        try
+        {
+            await ApiClient.LoginAsync(new LoginRequest { Username = loginUsername, Password = loginPassword });
+            successMessage = $"Authenticated as '{loginUsername}'! JWT generated.";
+            await LoadCustomersAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Authentication failed: {ex.Message}";
+        }
+        finally
+        {
+            isAuthenticating = false;
+        }
+    }
+
+    private void HandleLogout()
+    {
+        ApiClient.Logout();
+        customers = null;
+        successMessage = "Signed out successfully.";
+    }
+
+    private async Task LoadCustomersAsync()
+    {
+        if (!AuthStateProvider.IsAuthenticated) return;
+
+        isLoading = true;
+        errorMessage = null;
+        try
+        {
+            customers = await ApiClient.GetCustomersAsync(searchQuery);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to fetch customers: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task HandleSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await LoadCustomersAsync();
+        }
+    }
+
+    private async Task ClearSearch()
+    {
+        searchQuery = string.Empty;
+        await LoadCustomersAsync();
+    }
+
+    private void OpenAddModal()
+    {
+        modalError = null;
+        newCustomer = new CreateCustomerRequest
+        {
+            Name = string.Empty,
+            Email = string.Empty,
+            PhoneNumber = string.Empty
+        };
+        showAddModal = true;
+    }
+
+    private void OpenEditModal(CustomerDto c)
+    {
+        modalError = null;
+        editingCustomerId = c.CustomerId;
+        editCustomer = new UpdateCustomerRequest
+        {
+            Name = c.Name,
+            Email = c.Email,
+            PhoneNumber = c.PhoneNumber
+        };
+        showEditModal = true;
+    }
+
+    private async Task HandleCreateCustomerAsync()
+    {
+        modalError = null;
+        isSubmitting = true;
+        try
+        {
+            await ApiClient.CreateCustomerAsync(newCustomer);
+            showAddModal = false;
+            successMessage = $"Customer '{newCustomer.Name}' created successfully.";
+            await LoadCustomersAsync();
+        }
+        catch (Exception ex)
+        {
+            modalError = ex.Message;
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private async Task HandleUpdateCustomerAsync()
+    {
+        if (!editingCustomerId.HasValue) return;
+
+        modalError = null;
+        isSubmitting = true;
+        try
+        {
+            await ApiClient.UpdateCustomerAsync(editingCustomerId.Value, editCustomer);
+            showEditModal = false;
+            successMessage = $"Customer '{editCustomer.Name}' updated successfully.";
+            await LoadCustomersAsync();
+        }
+        catch (Exception ex)
+        {
+            modalError = ex.Message;
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private async Task DeleteCustomerAsync(Guid id, string name)
+    {
+        errorMessage = null;
+        successMessage = null;
+        try
+        {
+            await ApiClient.DeleteCustomerAsync(id);
+            successMessage = $"Customer '{name}' deleted.";
+            await LoadCustomersAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to delete customer: {ex.Message}";
+        }
+    }
+}
