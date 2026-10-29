@@ -22,6 +22,12 @@ public class ExceptionHandlingMiddleware
         {
             await _next(context);
         }
+        catch (ValidationException valEx)
+        {
+            var formattedErrors = string.Join("; ", valEx.Errors.Select(kv => $"{kv.Key}: {string.Join(", ", kv.Value)}"));
+            _logger.LogWarning("Validation failure on {Path}: {Message}. Details: {Errors}", context.Request.Path, valEx.Message, formattedErrors);
+            await HandleExceptionAsync(context, valEx);
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "An unhandled exception occurred: {Message}", ex.Message);

@@ -134,4 +134,31 @@ public class ServiceBusMessagingTests
         cts.Cancel();
         await consumer.StopAsync(CancellationToken.None);
     }
+
+    [Fact]
+    public async Task ProducerService_GenerateAndEnqueueRandomNumbers_ShouldPublishRequestedCount()
+    {
+        // Arrange
+        var inMemorySettings = new Dictionary<string, string?>
+        {
+            ["AzureServiceBus:ConnectionString"] = "UseDevelopmentEmulator=true"
+        };
+        var config = new ConfigurationBuilder().AddInMemoryCollection(inMemorySettings).Build();
+
+        var mockLogService = new Mock<IMessageConsumerLogService>();
+        var localQueue = new LocalServiceBusQueue();
+        var producer = new AzureServiceBusProducerService(
+            config,
+            NullLogger<AzureServiceBusProducerService>.Instance,
+            mockLogService.Object,
+            localQueue);
+
+        // Act: Generate 7 random numbers
+        var messageIds = await producer.GenerateAndEnqueueRandomNumbersAsync(count: 7, min: 10, max: 50);
+
+        // Assert
+        messageIds.Should().HaveCount(7);
+        mockLogService.Verify(l => l.LogMessageReceivedAsync(It.Is<ServiceBusMessageRecord>(r =>
+            r.Subject == "RandomNumberGenerated" && r.ApplicationProperties.ContainsKey("GeneratedNumber"))), Times.Exactly(7));
+    }
 }

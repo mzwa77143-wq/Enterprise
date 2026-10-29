@@ -220,21 +220,25 @@
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Product Name <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" placeholder="e.g. Enterprise Cloud Suite" @bind="newProduct.Name" />
+                        <div class="form-text">Must be between 2 and 100 characters.</div>
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Category <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" placeholder="e.g. Developer Tools" @bind="newProduct.Category" />
+                        <div class="form-text">Category name up to 50 characters.</div>
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Price (USD) <span class="text-danger">*</span></label>
-                        <input type="number" step="0.01" class="form-control" placeholder="e.g. 49.99" @bind="newProduct.Price" />
+                        <input type="number" step="0.01" min="0.01" class="form-control" placeholder="e.g. 49.99" @bind="newProduct.Price" />
+                        <div class="form-text">Price must be at least $0.01.</div>
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Description <span class="text-danger">*</span></label>
-                        <textarea class="form-control" rows="3" placeholder="Detailed product description..." @bind="newProduct.Description"></textarea>
+                        <textarea class="form-control" rows="3" placeholder="Detailed product description (minimum 5 characters)..." @bind="newProduct.Description"></textarea>
+                        <div class="form-text">Must be between 5 and 500 characters.</div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -278,21 +282,25 @@
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Product Name <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" @bind="editProduct.Name" />
+                        <div class="form-text">Must be between 2 and 100 characters.</div>
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Category <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" @bind="editProduct.Category" />
+                        <div class="form-text">Category name up to 50 characters.</div>
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Price (USD) <span class="text-danger">*</span></label>
-                        <input type="number" step="0.01" class="form-control" @bind="editProduct.Price" />
+                        <input type="number" step="0.01" min="0.01" class="form-control" @bind="editProduct.Price" />
+                        <div class="form-text">Price must be at least $0.01.</div>
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Description <span class="text-danger">*</span></label>
                         <textarea class="form-control" rows="3" @bind="editProduct.Description"></textarea>
+                        <div class="form-text">Must be between 5 and 500 characters.</div>
                     </div>
                 </div>
                 <div class="modal-footer">

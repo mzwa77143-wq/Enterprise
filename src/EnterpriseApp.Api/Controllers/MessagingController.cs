@@ -53,6 +53,28 @@ public class MessagingController : ControllerBase
         });
     }
 
+    [HttpPost("generate-random")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status202Accepted)]
+    public async Task<IActionResult> GenerateRandomNumbers(
+        [FromQuery] int count = 5,
+        [FromQuery] int min = 1,
+        [FromQuery] int max = 1000,
+        CancellationToken ct = default)
+    {
+        count = Math.Clamp(count, 1, 50);
+        if (min > max) (min, max) = (max, min);
+
+        var messageIds = await _producerService.GenerateAndEnqueueRandomNumbersAsync(count, min, max, ct);
+
+        return Accepted(new
+        {
+            GeneratedCount = messageIds.Count,
+            MessageIds = messageIds,
+            Status = "Enqueued",
+            DispatchedAtUtc = DateTime.UtcNow
+        });
+    }
+
     [HttpGet("logs")]
     [ProducesResponseType(typeof(IReadOnlyList<ServiceBusMessageDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetLogs()

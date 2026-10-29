@@ -67,57 +67,105 @@
     </div>
 
     <!-- Dispatch & Test Controls -->
-    <div class="card shadow-sm mb-4">
-        <div class="card-header bg-white py-3">
-            <h5 class="card-title mb-0"><i class="bi bi-send-fill me-2 text-primary"></i>Dispatch Message (Producer Service)</h5>
-        </div>
-        <div class="card-body">
-            <div class="row g-3">
-                <div class="col-md-4">
-                    <label class="form-label fw-semibold">Subject / Message Type:</label>
-                    <input type="text" class="form-control" placeholder="e.g. OrderCreated, CustomerRegistered" @bind="messageSubject" />
-                    
-                    <div class="d-flex flex-wrap gap-1 mt-2">
-                        <button class="btn btn-sm btn-outline-secondary" @onclick='() => SetPresetMessage("CustomerRegistered", "{\"customerId\": \"cust_101\", \"tier\": \"Gold\"}")'>
-                            CustomerRegistered
-                        </button>
-                        <button class="btn btn-sm btn-outline-secondary" @onclick='() => SetPresetMessage("OrderProcessed", "{\"orderId\": 9801, \"amount\": 149.99}")'>
-                            OrderProcessed
-                        </button>
-                        <button class="btn btn-sm btn-outline-danger" @onclick='() => SetPresetMessage("PoisonMessage", "{\"invalidToken\": true, \"forceError\": true}", true)'>
-                            Poison Message
-                        </button>
-                    </div>
+    <div class="row g-4 mb-4">
+        <!-- Random Number Producer Card -->
+        <div class="col-lg-5">
+            <div class="card shadow-sm h-100 border-primary">
+                <div class="card-header bg-primary text-white py-3 d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-dice-5-fill me-2"></i>Random Number Producer
+                    </h5>
+                    <span class="badge bg-light text-primary fw-semibold">Auto Generator</span>
                 </div>
-
-                <div class="col-md-5">
-                    <label class="form-label fw-semibold">Payload Body (JSON / Text):</label>
-                    <textarea class="form-control font-monospace" rows="3" placeholder='{"key": "value"}' @bind="messageBody"></textarea>
-                </div>
-
-                <div class="col-md-3 d-flex flex-column justify-content-between">
-                    <div class="form-check form-switch mt-2">
-                        <input class="form-check-input" type="checkbox" id="poisonCheck" @bind="simulatePoison" />
-                        <label class="form-check-label fw-semibold text-danger" for="poisonCheck">
-                            Force Dead-Letter (Poison)
-                        </label>
-                        <div class="form-text small text-muted">
-                            Causes consumer to route this message to the Dead-Letter Queue (DLQ).
+                <div class="card-body d-flex flex-column justify-content-between">
+                    <div>
+                        <p class="text-muted small">
+                            Generate random numbers and publish them to the queue. The background consumer will read each number under Peek-Lock semantics, print it to the server console, and update the telemetry log below.
+                        </p>
+                        <div class="row g-2 mb-3">
+                            <div class="col-4">
+                                <label class="form-label small fw-semibold">Count (1-50):</label>
+                                <input type="number" min="1" max="50" class="form-control form-control-sm" @bind="randomCount" />
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label small fw-semibold">Min:</label>
+                                <input type="number" class="form-control form-control-sm" @bind="randomMin" />
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label small fw-semibold">Max:</label>
+                                <input type="number" class="form-control form-control-sm" @bind="randomMax" />
+                            </div>
                         </div>
                     </div>
 
-                    <button class="btn btn-primary w-100 py-2 mt-2" @onclick="SendMessageAsync" disabled="@isSending">
-                        @if (isSending)
+                    <button class="btn btn-primary w-100 py-2" @onclick="GenerateRandomNumbersAsync" disabled="@isGeneratingRandom">
+                        @if (isGeneratingRandom)
                         {
                             <span class="spinner-border spinner-border-sm me-1" role="status"></span>
-                            <span>Publishing to Queue...</span>
+                            <span>Generating & Enqueueing...</span>
                         }
                         else
                         {
-                            <i class="bi bi-cloud-arrow-up me-1"></i>
-                            <span>Publish Message</span>
+                            <i class="bi bi-shuffle me-1"></i>
+                            <span>Generate & Enqueue Numbers</span>
                         }
                     </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Custom / Raw Message Dispatch Card -->
+        <div class="col-lg-7">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white py-3">
+                    <h5 class="card-title mb-0"><i class="bi bi-send-fill me-2 text-primary"></i>Custom Message Dispatch (Producer)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Subject / Message Type:</label>
+                            <input type="text" class="form-control form-control-sm" placeholder="e.g. OrderCreated" @bind="messageSubject" />
+                            
+                            <div class="d-flex flex-wrap gap-1 mt-2">
+                                <button class="btn btn-sm btn-outline-secondary py-0" @onclick='() => SetPresetMessage("CustomerRegistered", "{\"customerId\": \"cust_101\", \"tier\": \"Gold\"}")'>
+                                    CustomerRegistered
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary py-0" @onclick='() => SetPresetMessage("OrderProcessed", "{\"orderId\": 9801, \"amount\": 149.99}")'>
+                                    OrderProcessed
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger py-0" @onclick='() => SetPresetMessage("PoisonMessage", "{\"invalidToken\": true, \"forceError\": true}", true)'>
+                                    Poison Message
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Payload Body (JSON / Text):</label>
+                            <textarea class="form-control font-monospace form-control-sm" rows="3" placeholder='{"key": "value"}' @bind="messageBody"></textarea>
+                        </div>
+
+                        <div class="col-12 d-flex justify-content-between align-items-center pt-2 border-top">
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input" type="checkbox" id="poisonCheck" @bind="simulatePoison" />
+                                <label class="form-check-label fw-semibold text-danger small" for="poisonCheck">
+                                    Force Dead-Letter (Poison)
+                                </label>
+                            </div>
+
+                            <button class="btn btn-outline-primary" @onclick="SendMessageAsync" disabled="@isSending">
+                                @if (isSending)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                                    <span>Publishing...</span>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-cloud-arrow-up me-1"></i>
+                                    <span>Publish Message</span>
+                                }
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -216,6 +264,11 @@
     private bool simulatePoison = false;
     private bool autoRefresh = true;
     private System.Threading.Timer? refreshTimer;
+
+    private int randomCount = 5;
+    private int randomMin = 1;
+    private int randomMax = 1000;
+    private bool isGeneratingRandom = false;
 
     private string messageSubject = "OrderCreated";
     private string messageBody = "{\"orderId\": 1024, \"item\": \"Domain-Driven Design Book\", \"total\": 49.99}";
@@ -324,6 +377,31 @@
         finally
         {
             isSending = false;
+        }
+    }
+
+    private async Task GenerateRandomNumbersAsync()
+    {
+        isGeneratingRandom = true;
+        errorMessage = null;
+        successMessage = null;
+
+        try
+        {
+            var resp = await ApiClient.GenerateRandomNumbersAsync(randomCount, randomMin, randomMax);
+            var count = resp.TryGetProperty("generatedCount", out var cProp) ? cProp.GetInt32() : randomCount;
+            successMessage = $"Producer generated and published {count} random numbers to the queue! Consumer will read and print each number.";
+
+            await Task.Delay(400);
+            await RefreshDataAsync(silent: true);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to generate random numbers: {ex.Message}";
+        }
+        finally
+        {
+            isGeneratingRandom = false;
         }
     }
 

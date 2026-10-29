@@ -133,6 +133,38 @@ public class AzureServiceBusProducerService : IMessageProducerService
 
         return messageId;
     }
+
+    public async Task<IReadOnlyList<string>> GenerateAndEnqueueRandomNumbersAsync(
+        int count = 5,
+        int min = 1,
+        int max = 1000,
+        CancellationToken ct = default)
+    {
+        var messageIds = new List<string>();
+        for (int i = 0; i < count; i++)
+        {
+            var randomNumber = System.Security.Cryptography.RandomNumberGenerator.GetInt32(min, max + 1);
+            var content = JsonSerializer.Serialize(new
+            {
+                number = randomNumber,
+                generatedAtUtc = DateTime.UtcNow,
+                sequenceIndex = i + 1
+            });
+
+            var props = new Dictionary<string, string>
+            {
+                ["MessageType"] = "RandomNumber",
+                ["GeneratedNumber"] = randomNumber.ToString(),
+                ["Sequence"] = (i + 1).ToString()
+            };
+
+            _logger.LogInformation("Producer generating random number [{Sequence}/{Total}]: {RandomNumber}", i + 1, count, randomNumber);
+            var id = await PublishMessageAsync(content, "RandomNumberGenerated", props, ct);
+            messageIds.Add(id);
+        }
+
+        return messageIds;
+    }
 }
 
 public class AzureServiceBusConsumerHostedService : BackgroundService
@@ -215,6 +247,37 @@ public class AzureServiceBusConsumerHostedService : BackgroundService
         }
     }
 
+    private void PrintMessageToConsole(string transportSource, string messageId, string subject, string body, IReadOnlyDictionary<string, string> properties)
+    {
+        // Highlight random numbers explicitly when present
+        if (properties.TryGetValue("GeneratedNumber", out var numStr))
+        {
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine($"[CONSUMER ({transportSource})] READ RANDOM NUMBER: {numStr} (MessageId: {messageId})");
+            Console.ResetColor();
+        }
+        else
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(body);
+                if (doc.RootElement.TryGetProperty("number", out var numProp))
+                {
+                    Console.ForegroundColor = ConsoleColor.Cyan;
+                    Console.WriteLine($"[CONSUMER ({transportSource})] READ RANDOM NUMBER: {numProp} (MessageId: {messageId})");
+                    Console.ResetColor();
+                    return;
+                }
+            }
+            catch
+            {
+                // Not JSON with "number"
+            }
+
+            Console.WriteLine($"[CONSUMER ({transportSource})] Read message: {subject} - Body: {body}");
+        }
+    }
+
     public async Task HandleMessageAsync(ProcessMessageEventArgs args)
     {
         var messageId = args.Message.MessageId;
@@ -222,6 +285,12 @@ public class AzureServiceBusConsumerHostedService : BackgroundService
         var body = args.Message.Body.ToString();
 
         _logger.LogInformation("Received message {MessageId} with Peek-Lock. Subject: {Subject}", messageId, subject);
+
+        // Convert application properties for inspection & printing
+        var appProps = args.Message.ApplicationProperties.ToDictionary(k => k.Key, v => v.Value?.ToString() ?? string.Empty);
+
+        // Consumer reads and prints the number/message to console
+        PrintMessageToConsole("Live Azure Service Bus", messageId, subject, body, appProps);
 
         // Check if dead-letter was requested via application property
         if (args.Message.ApplicationProperties.TryGetValue("SimulateDeadLetter", out var dlVal) &&
@@ -239,7 +308,12 @@ public class AzureServiceBusConsumerHostedService : BackgroundService
         // Explicit Peek-Lock completion
         await args.CompleteMessageAsync(args.Message);
         _logger.LogInformation("Message {MessageId} successfully completed via CompleteMessageAsync.", messageId);
-        await _logService.LogMessageCompletedAsync(messageId, "Message processed and completed with Peek-Lock (CompleteMessageAsync).");
+        
+        var completedNotes = appProps.TryGetValue("GeneratedNumber", out var n)
+            ? $"Consumed & printed random number: {n} (Peek-Lock completed)"
+            : "Message processed and completed with Peek-Lock (CompleteMessageAsync).";
+
+        await _logService.LogMessageCompletedAsync(messageId, completedNotes);
     }
 
     public Task HandleErrorAsync(ProcessErrorEventArgs args)
@@ -253,8 +327,11 @@ public class AzureServiceBusConsumerHostedService : BackgroundService
     {
         _logger.LogInformation("Processing message {MessageId} under Peek-Lock semantics.", message.MessageId);
 
+        // Consumer reads and prints the number/message to console
+        PrintMessageToConsole("Local Resilient Queue", message.MessageId, message.Subject, message.Body, message.ApplicationProperties);
+
         // Simulate realistic network/processing latency
-        await Task.Delay(300, ct);
+        await Task.Delay(200, ct);
 
         // Check for simulated dead-lettering
         if (message.ApplicationProperties.TryGetValue("SimulateDeadLetter", out var dlVal) &&
@@ -266,7 +343,11 @@ public class AzureServiceBusConsumerHostedService : BackgroundService
         }
 
         // Peek-lock completion
-        await _logService.LogMessageCompletedAsync(message.MessageId, "Successfully completed under Peek-Lock pattern.");
+        var completedNotes = message.ApplicationProperties.TryGetValue("GeneratedNumber", out var n)
+            ? $"Consumed & printed random number: {n} (Peek-Lock completed)"
+            : "Successfully completed under Peek-Lock pattern.";
+
+        await _logService.LogMessageCompletedAsync(message.MessageId, completedNotes);
         _logger.LogInformation("Message {MessageId} finalized.", message.MessageId);
     }
 

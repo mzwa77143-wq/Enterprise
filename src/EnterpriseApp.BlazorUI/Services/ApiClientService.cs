@@ -31,6 +31,62 @@ public class ApiClientService
         }
     }
 
+    private static string ExtractErrorMessage(string rawContent, System.Net.HttpStatusCode statusCode)
+    {
+        if (string.IsNullOrWhiteSpace(rawContent))
+        {
+            return $"API request failed with status code {statusCode}.";
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(rawContent);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("errors", out var errorsProp) && errorsProp.ValueKind == JsonValueKind.Object)
+            {
+                var errorMessages = new List<string>();
+                foreach (var prop in errorsProp.EnumerateObject())
+                {
+                    if (prop.Value.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var item in prop.Value.EnumerateArray())
+                        {
+                            var str = item.GetString();
+                            if (!string.IsNullOrWhiteSpace(str)) errorMessages.Add(str);
+                        }
+                    }
+                    else if (prop.Value.ValueKind == JsonValueKind.String)
+                    {
+                        var str = prop.Value.GetString();
+                        if (!string.IsNullOrWhiteSpace(str)) errorMessages.Add(str);
+                    }
+                }
+
+                if (errorMessages.Count > 0)
+                {
+                    return string.Join(" ", errorMessages);
+                }
+            }
+
+            if (root.TryGetProperty("detail", out var detailProp) && !string.IsNullOrWhiteSpace(detailProp.GetString()))
+            {
+                return detailProp.GetString()!;
+            }
+
+            if (root.TryGetProperty("title", out var titleProp) && !string.IsNullOrWhiteSpace(titleProp.GetString()))
+            {
+                return titleProp.GetString()!;
+            }
+        }
+        catch
+        {
+            // Fall back to raw text if not valid JSON
+        }
+
+        return rawContent;
+    }
+
     private async Task<T> SendAsync<T>(HttpRequestMessage request)
     {
         SetAuthorizationHeader(request);
@@ -39,7 +95,8 @@ public class ApiClientService
         if (!response.IsSuccessStatusCode)
         {
             var content = await response.Content.ReadAsStringAsync();
-            throw new HttpRequestException($"API request failed ({response.StatusCode}): {content}", null, response.StatusCode);
+            var message = ExtractErrorMessage(content, response.StatusCode);
+            throw new HttpRequestException(message, null, response.StatusCode);
         }
 
         return (await response.Content.ReadFromJsonAsync<T>(_jsonOptions))!;
@@ -53,7 +110,8 @@ public class ApiClientService
         if (!response.IsSuccessStatusCode)
         {
             var content = await response.Content.ReadAsStringAsync();
-            throw new HttpRequestException($"API request failed ({response.StatusCode}): {content}", null, response.StatusCode);
+            var message = ExtractErrorMessage(content, response.StatusCode);
+            throw new HttpRequestException(message, null, response.StatusCode);
         }
     }
 
@@ -143,6 +201,12 @@ public class ApiClientService
         {
             Content = JsonContent.Create(request)
         };
+        return await SendAsync<JsonElement>(req);
+    }
+
+    public async Task<JsonElement> GenerateRandomNumbersAsync(int count = 5, int min = 1, int max = 1000)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Post, $"api/messaging/generate-random?count={count}&min={min}&max={max}");
         return await SendAsync<JsonElement>(req);
     }
 
